@@ -1,130 +1,127 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import TextInputSearch from './src/components/TextInputSearch';
 import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
-
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+  getNextFiveDaysForecast,
+  ResponseGetNextFiveDaysForecast,
+  ResponseSearchByCity,
+  searchByCity,
+  WeatherApiLocation,
+} from './src/domains/weather/api';
+import ForecastData from './src/components/Forecast';
+import Snackbar from 'react-native-snackbar';
+import { format } from 'date-fns';
 
 function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  const [citiesData, setCitiesData] = useState<ResponseSearchByCity>([]);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+  const [forecast, setForecast] = useState<ResponseGetNextFiveDaysForecast>(null);
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the recommendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
+  const [isLoadingCity, setIsLoadingCity] = useState(false);
+  const [isLoadingForecast, setIsLoadingForecast] = useState(false);
+
+  const [lastTimeUpdated, setLastTimeUpdated] = useState<Date>(null);
+
+  async function getForecast(id: number) {
+    try {
+      setIsLoadingForecast(true);
+
+      const response = await getNextFiveDaysForecast(id);
+
+      setForecast(response.data);
+      setLastTimeUpdated(new Date());
+    } catch (error) {
+      console.log('error', error);
+
+      Snackbar.show({
+        text: 'Error to get forecast',
+        backgroundColor: 'red',
+      });
+    } finally {
+      setIsLoadingForecast(false);
+    }
+  }
+
+  async function onSearchCity(value: string) {
+    try {
+      if (!value) {
+        setCitiesData([]);
+        setForecast(undefined);
+
+        return;
+      }
+
+      setIsLoadingCity(true);
+
+      const response = await searchByCity(value);
+
+      if (response?.data?.length === 0) {
+        setCitiesData([]);
+        setForecast(undefined);
+
+        return;
+      }
+
+      setCitiesData(response.data);
+    } catch (error) {
+      console.error('err', error);
+
+      Snackbar.show({
+        text: 'Error to get city',
+        backgroundColor: 'red',
+      });
+    } finally {
+      setIsLoadingCity(false);
+    }
+  }
+
+  function extractItem(option: any) {
+    return option?.name + ', ' + option?.region + ', ' + option?.country;
+  }
+
+  function onSelectOption(value: WeatherApiLocation) {
+    getForecast(value.id);
+  }
 
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
+    <KeyboardAvoidingView behavior="height" style={styles.container}>
+      <Text style={styles.title}>WeatherNow</Text>
+
+      <TextInputSearch
+        options={citiesData}
+        placeholder="Search for a city"
+        onSearch={onSearchCity}
+        extractItem={extractItem}
+        isLoading={isLoadingCity}
+        onSelectOption={onSelectOption}
       />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
-        </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
+
+      <ForecastData data={forecast} isLoading={isLoadingForecast} />
+
+      {lastTimeUpdated ? (
+        <Text style={styles.textLastTimeUpdated}>
+          Last time updated: {format(lastTimeUpdated, 'Pp')}
+        </Text>
+      ) : null}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#2E335A',
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+  title: {
+    fontSize: 28,
+    fontWeight: 'regular',
+    marginBottom: 17,
+    color: 'white',
   },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
+  textLastTimeUpdated: {
+    color: 'white',
+    fontSize: 10,
   },
 });
 
